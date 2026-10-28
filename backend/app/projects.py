@@ -73,6 +73,7 @@ class SceneProject(BaseModel):
     duration_ms: int = Field(default=0, ge=0)
     characters: list[Character] = Field(default_factory=list, max_length=100)
     lines: list[DialogueLine] = Field(default_factory=list, max_length=5000)
+    prepared_audio_file: str | None = Field(default=None, pattern=r"^audio/prepared\.wav$")
     created_at: str
     updated_at: str
 

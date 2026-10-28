@@ -6,6 +6,8 @@ if ([string]::IsNullOrWhiteSpace($env:DUBPARTY_DATA_DIR)) { $env:DUBPARTY_DATA_D
 $runtimeRoot = Join-Path $projectRoot ".runtime"
 $nodeRoot = Join-Path $runtimeRoot "node"
 $pythonRoot = Join-Path $runtimeRoot "python"
+$ffmpegRoot = Join-Path $runtimeRoot "ffmpeg"
+$ffmpegBin = Join-Path $ffmpegRoot "bin"
 $nodePath = Join-Path $nodeRoot "node.exe"
 $npmCmd = Join-Path $nodeRoot "npm.cmd"
 $pythonPath = Join-Path $pythonRoot "python.exe"
@@ -20,11 +22,45 @@ $nodeArchive = "node-v$nodeVersion-win-x64.zip"
 $pythonArchive = "python-$pythonVersion-embed-amd64.zip"
 $nodeUrl = "https://nodejs.org/dist/v$nodeVersion/$nodeArchive"
 $pythonUrl = "https://www.python.org/ftp/python/$pythonVersion/$pythonArchive"
+$ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 $pipUrl = "https://bootstrap.pypa.io/get-pip.py"
 
 function Download-File([string]$Url, [string]$Destination) {
     Write-Host "Downloading $Url ..." -ForegroundColor Cyan
     Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination
+}
+
+function Ensure-Ffmpeg {
+    $ffmpegExe = Join-Path $ffmpegBin "ffmpeg.exe"
+    $ffprobeExe = Join-Path $ffmpegBin "ffprobe.exe"
+    $systemFfmpeg = Get-Command "ffmpeg.exe" -ErrorAction SilentlyContinue
+    $systemFfprobe = Get-Command "ffprobe.exe" -ErrorAction SilentlyContinue
+    if ($systemFfmpeg -and $systemFfprobe) {
+        $env:DUBPARTY_FFMPEG_BIN = Split-Path -Parent $systemFfmpeg.Source
+        Write-Host "Using FFmpeg from PATH: $($systemFfmpeg.Source)" -ForegroundColor DarkGray
+        return
+    }
+    if (-not (Test-Path $ffmpegExe) -or -not (Test-Path $ffprobeExe)) {
+        New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
+        $archive = Join-Path $runtimeRoot "ffmpeg-release-essentials.zip"
+        $extract = Join-Path $runtimeRoot "ffmpeg-extract"
+        Download-File $ffmpegUrl $archive
+        if (Test-Path $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
+        Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+        $binary = Get-ChildItem -LiteralPath $extract -Filter "ffmpeg.exe" -File -Recurse | Select-Object -First 1
+        if (-not $binary) { throw "The downloaded FFmpeg archive does not contain ffmpeg.exe." }
+        New-Item -ItemType Directory -Path $ffmpegBin -Force | Out-Null
+        Copy-Item -Path (Join-Path $binary.DirectoryName "*") -Destination $ffmpegBin -Recurse -Force
+        $license = Get-ChildItem -LiteralPath $extract -Include "LICENSE*","COPYING*" -File -Recurse | Select-Object -First 1
+        if ($license) { Copy-Item -LiteralPath $license.FullName -Destination $ffmpegRoot -Force }
+        Remove-Item -LiteralPath $extract,$archive -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (-not (Test-Path $ffmpegExe) -or -not (Test-Path $ffprobeExe)) { throw "FFmpeg or FFprobe is missing after extraction." }
+    $env:DUBPARTY_FFMPEG_BIN = $ffmpegBin
+    $versionOutput = & $ffmpegExe -version 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "The downloaded FFmpeg executable could not start." }
+    $version = $versionOutput | Select-Object -First 1
+    Write-Host "FFmpeg ready: $version" -ForegroundColor DarkGray
 }
 
 function Ensure-Runtime {
@@ -54,6 +90,7 @@ function Ensure-Runtime {
     if (-not (Test-Path $nodePath)) { throw "Portable Node.js executable is missing." }
 
     $env:PATH = "$nodeRoot;$env:PATH"
+    Ensure-Ffmpeg
 
     $pthFile = Join-Path $pythonRoot "python312._pth"
     if (Test-Path $pthFile) {

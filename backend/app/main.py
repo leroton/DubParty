@@ -10,6 +10,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .audio import router as audio_router
 from .lobby import Lobby, create_lobby_app, validate_bind_ip
 from .models import InterfaceInfo, StartLobbyRequest
 from .projects import router as projects_router
@@ -127,6 +128,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="DubParty Local Control", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.include_router(projects_router)
+app.include_router(audio_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

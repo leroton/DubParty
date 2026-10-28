@@ -21,6 +21,7 @@ export interface SceneProject {
   duration_ms: number;
   characters: Character[];
   lines: DialogueLine[];
+  prepared_audio_file: string | null;
   created_at: string;
   updated_at: string;
 }
