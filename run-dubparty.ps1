@@ -89,7 +89,7 @@ function Ensure-Runtime {
     if (-not (Test-Path $pythonPath)) { throw "Portable Python was downloaded, but python.exe is missing." }
     if (-not (Test-Path $nodePath)) { throw "Portable Node.js executable is missing." }
 
-    $env:PATH = "$nodeRoot;$env:PATH"
+    $env:PATH = "$ffmpegBin;$nodeRoot;$env:PATH"
     Ensure-Ffmpeg
 
     $pthFile = Join-Path $pythonRoot "python312._pth"

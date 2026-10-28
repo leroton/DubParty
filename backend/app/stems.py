@@ -22,6 +22,33 @@ jobs_lock = asyncio.Lock()
 StemState = Literal["idle", "queued", "running", "completed", "failed", "cancelled"]
 MODEL_NAME = "htdemucs"
 MODEL_CHECKPOINT = "955717e8-8726e21a.th"
+DEMUCS_RUNNER = r'''
+import runpy
+import sys
+import wave
+
+import numpy
+import torch
+import torchaudio
+
+
+def save_wav(path, wav, sample_rate, **_kwargs):
+    data = wav.detach().cpu().clamp(-1, 1)
+    if data.dim() == 2:
+        data = data.transpose(0, 1)
+    pcm = (data * 32767).to(torch.int16).contiguous().numpy().astype(numpy.int16).tobytes()
+    channels = int(wav.shape[0]) if wav.dim() == 2 else 1
+    with wave.open(path, "wb") as output:
+        output.setnchannels(channels)
+        output.setsampwidth(2)
+        output.setframerate(int(sample_rate))
+        output.writeframes(pcm)
+
+
+torchaudio.save = save_wav
+sys.argv = ["demucs.separate", *sys.argv[1:]]
+runpy.run_module("demucs.separate", run_name="__main__")
+'''
 
 
 @dataclass
@@ -133,15 +160,24 @@ def _format_job(job: StemJob | None, project_id: str | None = None) -> dict[str,
 async def _run_install(job: StemJob) -> None:
     try:
         job.state = "running"
-        job.message = "Устанавливаются Demucs и PyTorch. Это может занять несколько минут…"
-        process = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "demucs==4.0.1",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        )
-        job.process = process
-        output_task = asyncio.create_task(_read_output(job, process))
-        return_code = await process.wait()
-        await output_task
+        job.message = "Подготавливаются инструменты установки…"
+        for packages, message in [
+            (["setuptools", "wheel"], "Подготавливаются setuptools и wheel…"),
+            (["demucs==4.0.1", "torchcodec"], "Устанавливаются Demucs, PyTorch и TorchCodec. Это может занять несколько минут…"),
+        ]:
+            if job.cancel_requested:
+                break
+            job.message = message
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *packages,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+            job.process = process
+            output_task = asyncio.create_task(_read_output(job, process))
+            return_code = await process.wait()
+            await output_task
+            if return_code != 0:
+                break
         if job.cancel_requested:
             job.state = "cancelled"
             job.progress = 0
@@ -227,7 +263,7 @@ async def _run_separation(job: StemJob, request: SeparationRequest) -> None:
         audio_dir.mkdir(parents=True, exist_ok=True)
         out_dir.mkdir(parents=True, exist_ok=False)
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "demucs.separate", "--two-stems=vocals",
+            sys.executable, "-c", DEMUCS_RUNNER, "--two-stems=vocals",
             "-n", MODEL_NAME, "--device", job.device, "--out", str(out_dir), str(source),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
         )

@@ -60,7 +60,7 @@ Launcher ищет системные FFmpeg/FFprobe и использует их
 
 Используется модель `htdemucs` в режиме `--two-stems=vocals`. После успешной обработки в проект публикуются две WAV-дорожки: `vocals.wav` и `accompaniment.wav`; временная директория удаляется при ошибке или отмене. API отдаёт статусы и ссылки для скачивания. Это разделение вокала/голоса и остального микса, а не выделение отдельных персонажей.
 
-Проверено: TypeScript/Vite build, Python compileall, маршруты `/api/stems/status` и `/api/stems/install/status` во временном backend, отсутствие ложной готовности при неустановленных Demucs/PyTorch. Полный прогон модели не выполнен: текущий runtime не содержит ML-зависимости и модельные веса.
+Проверено: TypeScript/Vite build, Python compileall, маршруты `/api/stems/status` и `/api/stems/install/status` во временном backend, установка Demucs 4.0.1 и PyTorch CPU 2.15.0 в portable runtime, реальный CPU-прогон `htdemucs` на тестовом WAV, скачивание обеих дорожек через API и `ffprobe`-проверка PCM WAV 44.1 кГц stereo. В Windows launcher добавляет portable FFmpeg DLL в `PATH`; результаты сохраняются через стандартный Python WAV writer, чтобы не зависеть от несовместимости TorchCodec при записи.
 
 ## Исправление запуска на чистом Windows
 
