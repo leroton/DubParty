@@ -1,7 +1,7 @@
 import { ChangeEvent, PointerEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Film, FolderOpen, LoaderCircle, Maximize, Minimize, Pause, Play, Plus, Save, Trash2, Upload, UserRound, Volume2, VolumeX, X } from "lucide-react";
 import "./EditorPage.css";
-import { projectsApi, type AudioOperation, type FfmpegStatus } from "../../services/projects";
+import { projectsApi, type AudioOperation, type DemucsStatus, type FfmpegStatus, type StemsOperation } from "../../services/projects";
 import type { Character, DialogueLine, SceneProject } from "../../types/project";
 
 const COLORS = ["#a88be0", "#62b7b1", "#d99a61", "#d6788b", "#76a9d8", "#b6c467"];
@@ -51,6 +51,10 @@ export default function EditorPage({ activeProjectId, canPublish, mode = "editor
   const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
   const [audioOperation, setAudioOperation] = useState<AudioOperation | null>(null);
   const [audioBusy, setAudioBusy] = useState(false);
+  const [demucsStatus, setDemucsStatus] = useState<DemucsStatus | null>(null);
+  const [stemsOperation, setStemsOperation] = useState<StemsOperation | null>(null);
+  const [stemsBusy, setStemsBusy] = useState(false);
+  const [stemDevice, setStemDevice] = useState<"auto" | "cpu" | "cuda">("auto");
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoStageRef = useRef<HTMLDivElement>(null);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
@@ -139,6 +143,31 @@ export default function EditorPage({ activeProjectId, canPublish, mode = "editor
   }, [canPublish, project?.id]);
 
   useEffect(() => {
+    if (!canPublish || !project?.id) return;
+    let active = true;
+    let pollTimer: number | undefined;
+    const refresh = async () => {
+      try {
+        const [status, operation] = await Promise.all([projectsApi.demucsStatus(), projectsApi.stemsStatus(project.id)]);
+        if (!active) return;
+        setDemucsStatus(status);
+        const activeOperation = status.install && ["queued", "running"].includes(status.install.state) ? status.install : operation;
+        setStemsOperation(activeOperation);
+        if (!( ["queued", "running"] as const).includes(activeOperation.state as "queued" | "running")) {
+          window.clearInterval(pollTimer);
+          pollTimer = undefined;
+        }
+      } catch (reason) {
+        if (active) setDemucsStatus({ available: false, version: null, torch_version: null, cuda_available: false, model_cached: false, message: reason instanceof Error ? reason.message : "Не удалось проверить Demucs." });
+      }
+    };
+    setStemsOperation(null);
+    void refresh();
+    pollTimer = window.setInterval(() => void refresh(), 1500);
+    return () => { active = false; window.clearInterval(pollTimer); };
+  }, [canPublish, project?.id]);
+
+  useEffect(() => {
     if (videoRef.current) {
       videoRef.current.volume = volume;
       videoRef.current.muted = muted;
@@ -216,6 +245,36 @@ export default function EditorPage({ activeProjectId, canPublish, mode = "editor
     try { setAudioOperation(await projectsApi.cancelAudio(project.id)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось отменить обработку аудио."); }
     finally { setAudioBusy(false); }
+  };
+
+  const installDemucs = async () => {
+    setStemsBusy(true);
+    try { setStemsOperation(await projectsApi.installDemucs()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось запустить установку Demucs."); }
+    finally { setStemsBusy(false); }
+  };
+
+  const cancelDemucsInstall = async () => {
+    setStemsBusy(true);
+    try { setStemsOperation(await projectsApi.cancelDemucsInstall()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось отменить установку Demucs."); }
+    finally { setStemsBusy(false); }
+  };
+
+  const separateStems = async () => {
+    if (!project) return;
+    setStemsBusy(true);
+    try { setStemsOperation(await projectsApi.separateStems(project.id, stemDevice)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось запустить разделение стемов."); }
+    finally { setStemsBusy(false); }
+  };
+
+  const cancelStems = async () => {
+    if (!project) return;
+    setStemsBusy(true);
+    try { setStemsOperation(await projectsApi.cancelStems(project.id)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось отменить разделение стемов."); }
+    finally { setStemsBusy(false); }
   };
 
   const onVideoMetadata = () => {
@@ -441,6 +500,7 @@ export default function EditorPage({ activeProjectId, canPublish, mode = "editor
       }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={() => setCurrentMs(Math.round((videoRef.current?.currentTime ?? 0) * 1000))} />{videoError && <div className="video-error">{videoError}</div>}</div>
       <div className="transport"><button className="icon-button transport-button" title={playing ? "Пауза" : "Воспроизвести"} aria-label={playing ? "Пауза" : "Воспроизвести"} onClick={togglePlayback}>{playing ? <Pause size={17} /> : <Play size={17} />}</button><span className="timecode">{formatPreciseTime(currentMs)} / {formatPreciseTime(effectiveDuration)}</span><input className="seek-slider" aria-label="Позиция видео" type="range" min={0} max={effectiveDuration} step={500} value={Math.min(currentMs, effectiveDuration)} onChange={(event) => seek(Number(event.target.value))} /><button className="icon-button transport-button volume-button" title={muted || volume === 0 ? "Включить звук" : "Выключить звук"} aria-label={muted || volume === 0 ? "Включить звук" : "Выключить звук"} onClick={() => setMuted((value) => !value)}>{muted || volume === 0 ? <VolumeX size={17} /> : <Volume2 size={17} />}</button><input className="volume-slider" aria-label="Громкость" title="Громкость" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(event) => { const next = Number(event.target.value); setVolume(next); setMuted(next === 0); }} /><button className="icon-button transport-button" title={fullscreen ? "Выйти из полноэкранного режима" : "На весь экран"} aria-label={fullscreen ? "Выйти из полноэкранного режима" : "На весь экран"} onClick={() => { const stage = videoStageRef.current; if (!stage) return; if (document.fullscreenElement) void document.exitFullscreen(); else void stage.requestFullscreen().catch(() => setError("Не удалось открыть видео на весь экран.")); }}>{fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}</button></div>
       {mode === "editor" && <div className="audio-preparation"><div className="audio-preparation-main"><div><div className="audio-preparation-title">ПОДГОТОВКА АУДИО</div><p>{audioOperation?.message ?? ffmpegStatus?.message ?? "Проверка FFmpeg…"}</p>{ffmpegStatus?.available && <small>{ffmpegStatus.version}</small>}</div><div className="audio-preparation-actions">{audioOperation?.state === "queued" || audioOperation?.state === "running" ? <button className="secondary-button compact-button" disabled={audioBusy} onClick={() => void cancelAudio()}><X size={14} />Отменить</button> : <button className="secondary-button compact-button" disabled={audioBusy || !project || !ffmpegStatus?.available} onClick={() => void prepareAudio()}>{audioBusy ? <LoaderCircle className="spin" size={14} /> : <Film size={14} />}{audioOperation?.state === "completed" ? "Подготовить заново" : audioOperation?.state === "failed" ? "Повторить" : "Извлечь аудио"}</button>}</div></div>{audioOperation && ["queued", "running", "completed"].includes(audioOperation.state) && <div className="audio-progress-track" role="progressbar" aria-label="Подготовка аудио" aria-valuemin={0} aria-valuemax={100} aria-valuenow={audioOperation.progress}><span style={{ width: `${audioOperation.progress}%` }} /></div>}{audioOperation?.state === "completed" && audioOperation.output_file && <a className="audio-output-link" href={projectsApi.preparedAudioUrl(project.id)} download>Скачать подготовленный WAV</a>}</div>}
+      {mode === "editor" && <div className="audio-preparation stems-preparation"><div className="audio-preparation-main"><div><div className="audio-preparation-title">РАЗДЕЛЕНИЕ НА СТЕМЫ</div><p>{stemsOperation?.message ?? demucsStatus?.message ?? "Проверка Demucs…"}</p>{demucsStatus?.available && <small>Demucs {demucsStatus.version} · PyTorch {demucsStatus.torch_version} · {demucsStatus.cuda_available ? "CUDA доступна" : "только CPU"}</small>}</div><div className="audio-preparation-actions">{stemsOperation?.state === "queued" || stemsOperation?.state === "running" ? <button className="secondary-button compact-button" disabled={stemsBusy} onClick={() => void (demucsStatus?.available ? cancelStems() : cancelDemucsInstall())}><X size={14} />Отменить</button> : demucsStatus?.available ? <><select className="stem-device-select" aria-label="Устройство обработки" value={stemDevice} onChange={(event) => setStemDevice(event.target.value as "auto" | "cpu" | "cuda")}><option value="auto">Авто</option><option value="cpu">CPU</option><option value="cuda" disabled={!demucsStatus.cuda_available}>CUDA</option></select><button className="secondary-button compact-button" disabled={stemsBusy || !project || !project.prepared_audio_file} onClick={() => void separateStems()}>{stemsBusy ? <LoaderCircle className="spin" size={14} /> : <Film size={14} />}{stemsOperation?.state === "completed" ? "Повторить разделение" : "Разделить аудио"}</button></> : <button className="secondary-button compact-button" disabled={stemsBusy} onClick={() => void installDemucs()}>{stemsBusy ? <LoaderCircle className="spin" size={14} /> : <Film size={14} />}Установить Demucs</button>}</div></div>{stemsOperation && ["queued", "running", "completed"].includes(stemsOperation.state) && <div className="audio-progress-track" role="progressbar" aria-label="Разделение стемов" aria-valuemin={0} aria-valuemax={100} aria-valuenow={stemsOperation.progress}><span style={{ width: `${stemsOperation.progress}%` }} /></div>}{stemsOperation?.state === "completed" && project && <div className="stem-links"><a className="audio-output-link" href={projectsApi.stemUrl(project.id, "vocals")} download>Скачать голосовой стем</a><a className="audio-output-link" href={projectsApi.stemUrl(project.id, "accompaniment")} download>Скачать фоновый стем</a></div>}<small className="audio-note">Demucs разделяет вокал/голос и остальное аудио, но не выделяет отдельных персонажей.</small></div>}
       {mode === "editor" && <><div className="timeline-panel"><div className="timeline-head"><span>ТАЙМЛАЙН РЕПЛИК</span><div className="timeline-tools"><label>Масштаб <input aria-label="Масштаб таймлайна" type="range" min={1} max={8} step={1} value={zoom} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => setZoom(Number(event.target.value))} /><span>{zoom}×</span></label><button className="secondary-button compact-button" onClick={addLine}><Plus size={14} />Добавить реплику</button></div></div><div className={`timeline-scroll ${timelinePanning ? "panning" : ""}`} ref={timelineScrollRef} onWheel={timelineWheel} onPointerDown={timelinePointerDown} onPointerMove={timelinePointerMove} onPointerUp={timelinePointerUp} onPointerCancel={timelinePointerUp}><div className="timeline-inner" ref={timelineInnerRef} style={{ width: `${zoom * 100}%`, "--second-width": `${100000 / effectiveDuration}%`, "--five-second-width": `${500000 / effectiveDuration}%`, "--half-second-width": `${50000 / effectiveDuration}%` } as React.CSSProperties}><div className="timeline-ruler">{rulerLabels.map((second) => <span className="ruler-label" key={second} style={{ left: `${second * 1000 / effectiveDuration * 100}%` }}>{formatTime(second * 1000)}</span>)}</div><div className="timeline-track" style={{ height: `${Math.max(144, lineLanes.count * 34 + 16)}px` }}><div className="timeline-playhead" style={{ left: `${Math.min(100, currentMs / effectiveDuration * 100)}%` }} />{sortedLines.map((line) => { const character = project.characters.find((item) => item.id === line.character_id); return <button className={`dialogue-block ${selectedLineId === line.id ? "selected" : ""}`} key={line.id} style={{ top: `${8 + (lineLanes.lanes.get(line.id) ?? 0) * 34}px`, left: `${line.start_ms / effectiveDuration * 100}%`, width: `${Math.max(1.5, (line.end_ms - line.start_ms) / effectiveDuration * 100)}%`, borderColor: character?.color ?? "#888" }} onPointerDown={(event) => startLineDrag(event, line)} onPointerMove={moveLineDrag} onPointerUp={() => { dragRef.current = null; }} onClick={() => { setSelectedLineId(line.id); seek(line.start_ms); }}><span>{character?.name ?? "Без роли"}</span><small>{formatTime(line.start_ms)}</small><i className="line-handle line-handle-start" data-edge="start" /><i className="line-handle line-handle-end" data-edge="end" /></button>; })}</div></div></div></div>
       <div className="editor-lower"><aside className="characters-panel"><div className="panel-title"><span>ПЕРСОНАЖИ</span><UserRound size={14} /></div><div className="character-add"><input placeholder="Имя персонажа" value={newCharacter} onChange={(event) => setNewCharacter(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addCharacter(); }} /><button className="icon-button tiny" title="Добавить персонажа" onClick={addCharacter}><Plus size={15} /></button></div>{project.characters.map((character) => <div className="character-row" key={character.id}><input className="character-color" aria-label={`Цвет персонажа ${character.name}`} type="color" value={character.color} onChange={(event) => updateProject((draft) => ({ ...draft, characters: draft.characters.map((item) => item.id === character.id ? { ...item, color: event.target.value } : item) }))} /><input value={character.name} onChange={(event) => updateProject((draft) => ({ ...draft, characters: draft.characters.map((item) => item.id === character.id ? { ...item, name: event.target.value } : item) }))} /><button className="icon-button tiny" title="Удалить персонажа" onClick={() => deleteCharacter(character.id)}><Trash2 size={14} /></button></div>)}</aside><aside className="line-properties"><div className="panel-title"><span>СВОЙСТВА РЕПЛИКИ</span>{selectedLine && <button className="icon-button tiny" title="Удалить реплику" onClick={deleteLine}><Trash2 size={14} /></button>}</div>{selectedLine ? <div className="property-form"><label>Персонаж<select value={selectedLine.character_id ?? ""} onChange={(event) => editLine({ character_id: event.target.value || null })}><option value="">Без роли</option>{project.characters.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></label><label>Текст реплики<textarea value={selectedLine.text} onChange={(event) => editLine({ text: event.target.value})} /></label><div className="property-grid"><label>Начало, мс<input type="number" min={0} max={Math.max(0, selectedLine.end_ms - 10)} value={selectedLine.start_ms} onChange={(event) => editLine({ start_ms: Math.min(Number(event.target.value), selectedLine.end_ms - 10) })} /></label><label>Конец, мс<input type="number" min={selectedLine.start_ms + 10} max={effectiveDuration} value={selectedLine.end_ms} onChange={(event) => editLine({ end_ms: Math.max(Number(event.target.value), selectedLine.start_ms + 10) })} /></label></div><div className="property-time">Длительность: {formatTime(selectedLine.end_ms - selectedLine.start_ms)}</div></div> : <div className="no-selection">Выберите блок на таймлайне</div>}</aside></div></>}
     </div>}

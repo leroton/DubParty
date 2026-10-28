@@ -74,6 +74,8 @@ class SceneProject(BaseModel):
     characters: list[Character] = Field(default_factory=list, max_length=100)
     lines: list[DialogueLine] = Field(default_factory=list, max_length=5000)
     prepared_audio_file: str | None = Field(default=None, pattern=r"^audio/prepared\.wav$")
+    vocals_stem_file: str | None = Field(default=None, pattern=r"^audio/stems/[a-f0-9-]{36}/vocals\.wav$")
+    accompaniment_stem_file: str | None = Field(default=None, pattern=r"^audio/stems/[a-f0-9-]{36}/accompaniment\.wav$")
     created_at: str
     updated_at: str
 

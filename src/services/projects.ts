@@ -16,6 +16,24 @@ export interface AudioOperation {
   output_file: string | null;
 }
 
+export interface DemucsStatus {
+  available: boolean;
+  version: string | null;
+  torch_version: string | null;
+  cuda_available: boolean;
+  model_cached: boolean;
+  message: string;
+  install?: StemsOperation;
+}
+
+export interface StemsOperation {
+  state: "idle" | "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number;
+  message: string;
+  vocals_file: string | null;
+  accompaniment_file: string | null;
+}
+
 async function projectRequest<T>(path: string, init?: RequestInit, timeoutMs = 30000): Promise<T> {
   let response: Response;
   try {
@@ -54,5 +72,37 @@ export const projectsApi = {
   prepareAudio: (id: string) => projectRequest<AudioOperation>(`/${encodeURIComponent(id)}/audio/prepare`, { method: "POST" }),
   cancelAudio: (id: string) => projectRequest<AudioOperation>(`/${encodeURIComponent(id)}/audio/prepare`, { method: "DELETE" }),
   preparedAudioUrl: (id: string) => `${API}/${encodeURIComponent(id)}/audio/prepared`,
+  demucsStatus: async () => {
+    let response: Response;
+    try { response = await fetch(`${CONTROL_API}/stems/status`, { signal: AbortSignal.timeout(25000) }); }
+    catch { throw new Error("Не удалось проверить Demucs. Проверьте, что локальный backend запущен."); }
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail ?? `Ошибка Demucs (${response.status})`);
+    return body as DemucsStatus;
+  },
+  installDemucs: async () => {
+    const response = await fetch(`${CONTROL_API}/stems/install`, { method: "POST", signal: AbortSignal.timeout(15000) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail ?? `Ошибка установки Demucs (${response.status})`);
+    return body as StemsOperation;
+  },
+  installDemucsStatus: async () => {
+    const response = await fetch(`${CONTROL_API}/stems/install/status`, { signal: AbortSignal.timeout(8000) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail ?? `Ошибка установки Demucs (${response.status})`);
+    return body as StemsOperation;
+  },
+  cancelDemucsInstall: async () => {
+    const response = await fetch(`${CONTROL_API}/stems/install`, { method: "DELETE", signal: AbortSignal.timeout(8000) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail ?? `Ошибка отмены установки Demucs (${response.status})`);
+    return body as StemsOperation;
+  },
+  stemsStatus: (id: string) => projectRequest<StemsOperation>(`/${encodeURIComponent(id)}/stems/status`),
+  separateStems: (id: string, device: "auto" | "cpu" | "cuda") => projectRequest<StemsOperation>(`/${encodeURIComponent(id)}/stems`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device }),
+  }),
+  cancelStems: (id: string) => projectRequest<StemsOperation>(`/${encodeURIComponent(id)}/stems`, { method: "DELETE" }),
+  stemUrl: (id: string, stem: "vocals" | "accompaniment") => `${API}/${encodeURIComponent(id)}/stems/${stem}`,
   videoUrl: (id: string) => `${API}/${encodeURIComponent(id)}/video`,
 };

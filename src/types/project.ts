@@ -22,6 +22,8 @@ export interface SceneProject {
   characters: Character[];
   lines: DialogueLine[];
   prepared_audio_file: string | null;
+  vocals_stem_file: string | null;
+  accompaniment_stem_file: string | null;
   created_at: string;
   updated_at: string;
 }

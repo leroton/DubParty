@@ -38,6 +38,10 @@
 .audio-progress-track span{display:block;height:100%;border-radius:inherit;background:#8e7abf;transition:width .2s ease}
 .audio-output-link{align-self:flex-start;color:#c2b4e9;font-size:9px;text-decoration:none}
 .audio-output-link:hover{text-decoration:underline}
+.stems-preparation{border-color:#3d3848}
+.stem-device-select{height:28px;padding:0 7px;border:1px solid #414248;border-radius:3px;background:#1b1c1f;color:#ddd;font-size:9px}
+.stem-links{display:flex;gap:14px;flex-wrap:wrap}
+.audio-note{color:#85868d;font-size:9px;line-height:1.4}
 .timeline-panel,.characters-panel,.line-properties{border-top:1px solid #34353a;background:#222326}
 .timeline-panel{padding:10px 12px 12px;overflow:hidden}
 .timeline-head,.panel-title{height:30px;display:flex;align-items:center;justify-content:space-between;color:#a9aab1;font-size:9px;font-weight:700}
