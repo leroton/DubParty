@@ -1,0 +1,24 @@
+.modal-backdrop{position:fixed;z-index:10;inset:0;display:grid;place-items:center;padding:20px;background:#0e0f11b8}
+.create-project-dialog{width:min(460px,100%);padding:20px;border:1px solid #45464c;border-radius:6px;background:#242529;box-shadow:0 16px 48px #0007}
+.create-project-dialog>header{display:flex;align-items:center;justify-content:space-between}
+.create-project-dialog h2{margin:13px 0 20px;color:#f0eff2;font-size:17px}
+.create-project-dialog .text-input{height:39px;margin:0 0 16px;font-size:12px}
+.project-file-picker{height:42px;display:flex;align-items:center;gap:10px;padding:0 11px;border:1px dashed #5a5663;border-radius:4px;color:#cbc5d6;font-size:11px;cursor:pointer}
+.project-file-picker:hover{border-color:#8877b1;background:#2d2a32}
+.project-file-picker span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-file-picker input{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.create-project-dialog>footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.project-tabs{height:44px;flex:0 0 44px;display:flex;align-items:stretch;gap:4px;padding:0 20px;border-bottom:1px solid #303135;background:#222326}
+.project-tab{position:relative;display:flex;align-items:center;gap:7px;padding:0 12px;border:0;background:transparent;color:#a3a4ab;font-size:11px;cursor:pointer}
+.project-tab:hover{color:#ededf0}.project-tab.active{color:#e8e2f5}
+.project-tab.active:after{position:absolute;right:8px;bottom:-1px;left:8px;height:2px;background:#8976bd;content:""}
+.project-tab:disabled{opacity:.5;cursor:default}
+.project-room-list{display:flex;flex-direction:column;gap:3px}
+.room-item{width:100%;cursor:pointer}
+.room-item:disabled{opacity:.5;cursor:default}
+.room-item.room-active{background:#302d37;color:#ece7f7}
+.project-room-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-welcome{display:flex;align-items:center;gap:12px}
+.chat-welcome-copy{min-width:0;flex:1}
+.chat-create-project{flex:0 0 auto;padding:0 10px}
+@media(max-width:760px){.project-tabs{padding:0 5px}.project-tab{padding:0 7px;font-size:10px}.project-tab svg{width:14px}}

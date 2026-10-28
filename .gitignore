@@ -1,0 +1,10 @@
+node_modules/
+dist/
+target/
+.venv/
+.runtime/
+.dubparty-data/
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+.npm-cache/
