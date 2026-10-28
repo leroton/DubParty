@@ -51,6 +51,9 @@ function Ensure-Runtime {
 
     if (-not (Test-Path $npmCmd)) { throw "Portable Node.js was downloaded, but npm.cmd is missing." }
     if (-not (Test-Path $pythonPath)) { throw "Portable Python was downloaded, but python.exe is missing." }
+    if (-not (Test-Path $nodePath)) { throw "Portable Node.js executable is missing." }
+
+    $env:PATH = "$nodeRoot;$env:PATH"
 
     $pthFile = Join-Path $pythonRoot "python312._pth"
     if (Test-Path $pthFile) {
