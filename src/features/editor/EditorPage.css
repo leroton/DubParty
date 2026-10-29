@@ -41,6 +41,9 @@
 .stems-preparation{border-color:#3d3848}
 .stem-device-select{height:28px;padding:0 7px;border:1px solid #414248;border-radius:3px;background:#1b1c1f;color:#ddd;font-size:9px}
 .stem-links{display:flex;gap:14px;flex-wrap:wrap}
+.stem-previews{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:14px}
+.stem-previews label{display:flex;flex-direction:column;gap:5px;color:#a9aab1;font-size:9px}
+.stem-previews audio{width:min(100%,460px);height:32px}
 .audio-note{color:#85868d;font-size:9px;line-height:1.4}
 .timeline-panel,.characters-panel,.line-properties{border-top:1px solid #34353a;background:#222326}
 .timeline-panel{padding:10px 12px 12px;overflow:hidden}

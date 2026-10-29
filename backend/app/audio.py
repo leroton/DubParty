@@ -127,6 +127,7 @@ async def _run_preparation(job: AudioJob, ffmpeg: Path, ffprobe: Path) -> None:
         if not source.is_file():
             raise RuntimeError("Исходное видео проекта не найдено.")
         job.state = "running"
+        job.progress = 2
         job.message = "Проверка исходного видео и звуковой дорожки…"
         duration_ms, has_audio = await _probe_media(job, ffprobe, source)
         if job.cancel_requested:
@@ -139,12 +140,15 @@ async def _run_preparation(job: AudioJob, ffmpeg: Path, ffprobe: Path) -> None:
         if job.duration_ms <= 0:
             raise RuntimeError("Не удалось определить длительность исходного видео.")
 
+        # Probe time is real work too; reserve an initial part of the progress range for it.
+        job.progress = 5
+
         audio_directory.mkdir(parents=True, exist_ok=True)
         job.message = "Извлечение звука и преобразование в WAV 48 кГц…"
         process = await asyncio.create_subprocess_exec(
             str(ffmpeg), "-hide_banner", "-nostats", "-y", "-i", str(source),
             "-map", "0:a:0", "-vn", "-sn", "-dn", "-ac", "2", "-ar", "48000",
-            "-c:a", "pcm_s16le", "-progress", "pipe:1", "-f", "wav", str(temporary),
+            "-c:a", "pcm_s16le", "-stats_period", "0.25", "-progress", "pipe:1", "-f", "wav", str(temporary),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         job.process = process
@@ -156,10 +160,17 @@ async def _run_preparation(job: AudioJob, ffmpeg: Path, ffprobe: Path) -> None:
                 key, separator, value = line.decode("ascii", errors="ignore").strip().partition("=")
                 if not separator:
                     continue
-                if key in {"out_time_us", "out_time_ms"}:
+                if key == "out_time":
+                    try:
+                        hours, minutes, seconds = value.split(":")
+                        elapsed_ms = round((int(hours) * 3600 + int(minutes) * 60 + float(seconds)) * 1000)
+                        job.progress = max(5, min(99, 5 + elapsed_ms * 94 / job.duration_ms))
+                    except (ValueError, TypeError):
+                        pass
+                elif key in {"out_time_us", "out_time_ms"}:
                     try:
                         elapsed_ms = int(value) // 1000
-                        job.progress = min(99, elapsed_ms * 100 / job.duration_ms)
+                        job.progress = max(5, min(99, 5 + elapsed_ms * 94 / job.duration_ms))
                     except ValueError:
                         pass
                 elif key == "progress" and value == "continue":
